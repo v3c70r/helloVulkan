@@ -8,6 +8,7 @@
 #include <cstring>
 #include <set>
 #include <limits>
+#include <fstream>
 
 const int WIDTH = 800;
 const int HEIGHT = 600;
@@ -25,6 +26,19 @@ const bool enableValidationLayers = false;
 #else
 const bool enableValidationLayers = true;
 #endif
+
+/////////////////// Helper functions /////////////
+static std::vector<char> readFile(const std::string& fileName){
+    std::ifstream file(fileName, std::ios::ate | std::ios::binary);
+    if (!file.is_open())
+        throw std::runtime_error("Failed to open file");
+    size_t fileSize = (size_t) file.tellg();
+    std::vector<char> buffer(fileSize);
+    file.seekg(0);
+    file.read(buffer.data(), fileSize);
+    file.close();
+    return buffer;
+}
 
 /////////////////// Callbacks ////////////////////
 
@@ -137,6 +151,8 @@ class HelloTriangleApplication {
         std::vector<VDeleter<VkImageView>> swapChainImageViews;
         VkFormat swapChainImageFormat;
         VkExtent2D swapChainExtent;
+        VDeleter<VkShaderModule> vertShaderModule{device, vkDestroyShaderModule};
+        VDeleter<VkShaderModule> fragShaderModule{device, vkDestroyShaderModule};
         VkQueue presentQueue;
         VkQueue graphicsQueue;
         GLFWwindow* window;
@@ -187,9 +203,70 @@ class HelloTriangleApplication {
             createLogicalDevice();
             createSwapChain();
             createImageViews();
+            createGraphicsPipeline();
+            
         }
 
+
+        void createShaderModule(const std::vector<char> &code, VDeleter<VkShaderModule> &VkShaderModule)
+        {
+            VkShaderModuleCreateInfo createInfo={};
+            createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            createInfo.codeSize = code.size();
+            createInfo.pCode = (uint32_t*)code.data();
+            if (vkCreateShaderModule(device, &createInfo, nullptr, &VkShaderModule) != VK_SUCCESS)
+                throw std::runtime_error("Failed to create shader module!");
+        }
         void createGraphicsPipeline() {
+            auto vertShaderCode = readFile("./shaders/vert.spv");
+            auto fragShaderCode = readFile("./shaders/frag.spv");
+            createShaderModule(vertShaderCode, vertShaderModule);
+            createShaderModule(fragShaderCode, fragShaderModule);
+            // There's no linking infromations above
+            // Create vert pipeline
+            VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
+            vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+            vertShaderStageInfo.module = vertShaderModule;
+            vertShaderStageInfo.pName = "main";
+
+            // Create frag pipeline
+            VkPipelineShaderStageCreateInfo fragShaderStageInfo = {};
+            fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+            fragShaderStageInfo.module = fragShaderModule;
+            fragShaderStageInfo.pName = "main";
+
+            VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+
+            // Specify vertex input
+            VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
+            vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+            vertexInputInfo.vertexBindingDescriptionCount = 0;
+            vertexInputInfo.pVertexBindingDescriptions = nullptr; // Optional
+            vertexInputInfo.vertexAttributeDescriptionCount = 0;
+            vertexInputInfo.pVertexAttributeDescriptions = nullptr; // Optional
+
+            // Pipeline assembly infos
+            VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
+            inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+            inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+            inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+            // Viewport
+            VkViewport viewport = {};
+            viewport.x = 0.0f;
+            viewport.y = 0.0f;
+            viewport.width = (float) swapChainExtent.width;
+            viewport.height = (float) swapChainExtent.height;
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+
+            // rectangle scissor 
+            VkRect2D scissor = {};
+            scissor.offset = {0, 0};
+            scissor.extent = swapChainExtent;
+
         }
 
         void createImageViews() {
@@ -212,7 +289,6 @@ class HelloTriangleApplication {
                 if (vkCreateImageView(device, &createInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS) {
                     throw std::runtime_error("failed to create image views!");
                 }
-                std::cout<<swapChainImageViews.size()<<std::endl;
 
 
             }
@@ -580,6 +656,7 @@ class HelloTriangleApplication {
             return VK_FALSE;
         }
 };
+
 
 int main() {
     HelloTriangleApplication app;
