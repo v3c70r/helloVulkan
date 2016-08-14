@@ -150,12 +150,21 @@ class HelloTriangleApplication {
         VDeleter<VkPipelineLayout> pipelineLayout{device, vkDestroyPipelineLayout};
 
         std::vector<VkImage> swapChainImages;
+        std::vector<VDeleter<VkFramebuffer>> swapChainFramebuffers;
         std::vector<VDeleter<VkImageView>> swapChainImageViews;
         VkFormat swapChainImageFormat;
         VkExtent2D swapChainExtent;
         VDeleter<VkShaderModule> vertShaderModule{device, vkDestroyShaderModule};
         VDeleter<VkShaderModule> fragShaderModule{device, vkDestroyShaderModule};
         VDeleter<VkRenderPass> renderPass{device, vkDestroyRenderPass};
+        VDeleter<VkPipeline> graphicsPipeline{device, vkDestroyPipeline};
+        VDeleter<VkCommandPool> commandPool{device, vkDestroyCommandPool};
+        std::vector<VkCommandBuffer> commandBuffers;
+
+        // Two semaphores
+        VDeleter<VkSemaphore> imageAvailableSemaphore{device, vkDestroySemaphore};
+        VDeleter<VkSemaphore> renderFinishedSemaphore{device, vkDestroySemaphore};
+        
         VkQueue presentQueue;
         VkQueue graphicsQueue;
         GLFWwindow* window;
@@ -206,9 +215,110 @@ class HelloTriangleApplication {
             createLogicalDevice();
             createSwapChain();
             createImageViews();
-            void createRenderPass();
+            createRenderPass();
             createGraphicsPipeline();
+            createFramebuffers();
+            createCommandPool();
+            createCommandBuffers();
+            createSemaphores();
             
+        }
+
+        void createSemaphores(){
+            VkSemaphoreCreateInfo semaphoreInfo = {};
+            semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+            if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphore) != VK_SUCCESS ||
+                    vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphore) != VK_SUCCESS) {
+
+                throw std::runtime_error("failed to create semaphores!");
+            }
+        }
+
+        void createCommandBuffers()
+        {
+            // https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Command_buffers
+            commandBuffers.resize(swapChainFramebuffers.size());
+            VkCommandBufferAllocateInfo allocInfo = {};
+            allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+            allocInfo.commandPool = commandPool;
+            allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+            allocInfo.commandBufferCount = (uint32_t) commandBuffers.size();
+
+            if (vkAllocateCommandBuffers(device, &allocInfo, commandBuffers.data()) != VK_SUCCESS)
+                throw std::runtime_error("failed to allocate command buffers!");
+
+            // Record command buffer
+            for (size_t i=0; i < commandBuffers.size(); i++)
+            {
+                VkCommandBufferBeginInfo beginInfo = {};
+                beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+                beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+                beginInfo.pInheritanceInfo = nullptr;
+                vkBeginCommandBuffer(commandBuffers[i], &beginInfo);
+
+                // Starting render pass
+                VkRenderPassBeginInfo  renderPassInfo = {};
+                renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+                renderPassInfo.renderPass = renderPass;
+                renderPassInfo.framebuffer = swapChainFramebuffers[i];
+
+                renderPassInfo.renderArea.offset = {0, 0};
+                renderPassInfo.renderArea.extent = swapChainExtent;
+
+                VkClearValue clearColor = {0.0f, 0.0f, 0.0f, 1.0f};
+                renderPassInfo.clearValueCount = 1;
+                renderPassInfo.pClearValues = &clearColor;
+
+                vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+                vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+                vkCmdDraw(commandBuffers[i], 3, 1, 0, 0);
+                vkCmdEndRenderPass(commandBuffers[i]);
+                if (vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS)
+                    throw std::runtime_error("Failed to record command buffer!");
+            }
+
+
+        }
+
+        void createCommandPool()
+        {
+            QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
+            VkCommandPoolCreateInfo poolInfo = {};
+            poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+            poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily;
+            poolInfo.flags = 0;
+            if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS)
+                throw std::runtime_error("Failed to create command pool!");
+
+            // Command buffer
+            
+        }
+
+        void createFramebuffers()
+        {
+            // Size of framebuffers eqaul to size of swapChainImages
+            swapChainFramebuffers.resize(swapChainImageViews.size(), VDeleter<VkFramebuffer>{device, vkDestroyFramebuffer});
+
+
+            // Create a framebuffer for each swapchainimage
+            for (size_t i = 0; i < swapChainImageViews.size(); i++) {
+                VkImageView attachments[] = {
+                    swapChainImageViews[i]
+                };
+
+                VkFramebufferCreateInfo framebufferInfo = {};
+                framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+                framebufferInfo.renderPass = renderPass;
+                framebufferInfo.attachmentCount = 1;
+                framebufferInfo.pAttachments = attachments;
+                framebufferInfo.width = swapChainExtent.width;
+                framebufferInfo.height = swapChainExtent.height;
+                framebufferInfo.layers = 1;
+
+                if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS) {
+                    throw std::runtime_error("failed to create framebuffer!");
+                }
+            }
         }
 
 
@@ -318,6 +428,17 @@ class HelloTriangleApplication {
             colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
             colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD; // Optional
 
+            VkPipelineColorBlendStateCreateInfo colorBlending = {};
+            colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+            colorBlending.logicOpEnable = VK_FALSE;
+            colorBlending.logicOp = VK_LOGIC_OP_COPY; // Optional
+            colorBlending.attachmentCount = 1;
+            colorBlending.pAttachments = &colorBlendAttachment;
+            colorBlending.blendConstants[0] = 0.0f; // Optional
+            colorBlending.blendConstants[1] = 0.0f; // Optional
+            colorBlending.blendConstants[2] = 0.0f; // Optional
+            colorBlending.blendConstants[3] = 0.0f; // Optional
+
             /* Those functions can be dynamic, too
              * VkDynamicState dynamicStates[] = {
              * VK_DYNAMIC_STATE_VIEWPORT,
@@ -355,6 +476,16 @@ class HelloTriangleApplication {
             pipelineInfo.pDepthStencilState = nullptr; // Optional
             pipelineInfo.pColorBlendState = &colorBlending;
             pipelineInfo.pDynamicState = nullptr; // Optional
+            pipelineInfo.layout = pipelineLayout;
+            pipelineInfo.renderPass = renderPass;
+            pipelineInfo.subpass = 0;
+
+            pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+            pipelineInfo.basePipelineIndex = -1;
+
+            if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS){
+                throw std::runtime_error("failed to create graphics pipeline!");
+            }
             
 
         }
@@ -386,6 +517,19 @@ class HelloTriangleApplication {
             renderPassInfo.pAttachments = &colorAttachment;
             renderPassInfo.subpassCount = 1;
             renderPassInfo.pSubpasses = &subPass;
+
+            // Subpass dependencies
+            VkSubpassDependency dependency = {};
+            dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+            dependency.dstSubpass = 0;
+            dependency.srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+            dependency.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+            dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            renderPassInfo.dependencyCount = 1;
+            renderPassInfo.pDependencies = &dependency;
+
+
 
             if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
                 throw std::runtime_error("failed to create render pass!");
@@ -760,7 +904,50 @@ class HelloTriangleApplication {
         void mainLoop() {
             while (!glfwWindowShouldClose(window)) {
                 glfwPollEvents();
+                drawFrame();
             }
+        }
+
+        void drawFrame(){
+            uint32_t imageIndex;
+            vkAcquireNextImageKHR(device, swapChain, std::numeric_limits<uint64_t>::max(), imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+
+            VkSubmitInfo submitInfo = {};
+            submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+            VkSemaphore waitSemaphores[] = {imageAvailableSemaphore};
+            VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+            submitInfo.waitSemaphoreCount = 1;
+            submitInfo.pWaitSemaphores = waitSemaphores;
+            submitInfo.pWaitDstStageMask = waitStages;
+
+            submitInfo.commandBufferCount = 1;
+            submitInfo.pCommandBuffers = &commandBuffers[imageIndex];
+
+            // Signal when command buffers finished execution
+            VkSemaphore signalSemaphores[] = {renderFinishedSemaphore};
+            submitInfo.signalSemaphoreCount = 1;
+            submitInfo.pSignalSemaphores = signalSemaphores;
+            if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS) {
+                throw std::runtime_error("failed to submit draw command buffer!");
+            }
+
+            VkPresentInfoKHR presentInfo = {};
+            presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+
+            presentInfo.waitSemaphoreCount = 1;
+            presentInfo.pWaitSemaphores = signalSemaphores;
+
+            VkSwapchainKHR swapChains[] = {swapChain};
+            presentInfo.swapchainCount = 1;
+            presentInfo.pSwapchains = swapChains;
+
+            presentInfo.pImageIndices = &imageIndex;
+
+            vkQueuePresentKHR(presentQueue, &presentInfo);
+            
+
+     
         }
 
         ////////////////// Callback functions
