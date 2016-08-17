@@ -12,7 +12,6 @@
 
 const int WIDTH = 800;
 const int HEIGHT = 600;
-#define NDEBUG
 
 const std::vector<const char*> validationLayers = {
     "VK_LAYER_LUNARG_standard_validation"
@@ -744,9 +743,20 @@ class HelloTriangleApplication {
             std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
             vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
             int i = 0;
+            std::cout<<"Fond "<<queueFamilies.size()<<" queue families\n";
             for (const auto& queueFamily : queueFamilies) {
+                std::cout<<"Queue family contains"<< queueFamily.queueCount<< " queues"<<std::endl;
                 if (queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
                     indices.graphicsFamily = i;
+                }
+                if (queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT) {
+                    std::cout<<"**Bounus**family Supports Compute \n";
+                }
+                if (queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT) {
+                    std::cout<<"**Bounus**family Supports transfer \n";
+                }
+                if (queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) {
+                    std::cout<<"**Bounus**family Supports sparse binding \n";
                 }
                 VkBool32 presentSupport = false;
                 vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
@@ -830,7 +840,7 @@ class HelloTriangleApplication {
             for (const char* layerName : validationLayers) {
 
                 bool layerFound = false;
-                std::cout<<"Checking layer: "<<layerName<<std::endl;
+                std::cout<<"Layer: "<<layerName<<std::endl;
 
                 for (const auto& layerProperties : availableLayers) {
                     if (strcmp(layerName, layerProperties.layerName) == 0) {
@@ -881,12 +891,15 @@ class HelloTriangleApplication {
             //createInfo.ppEnabledExtensionNames = glfwExtensions;
             
             auto extensions = getRequiredExtensions();
+
+            std::cout<<"=====Extensionss========\n";
+            for (const auto &ext: extensions)
+                std::cout<<ext<<std::endl;
+            std::cout<<"=====Extensionss========\n";
+
             createInfo.enabledExtensionCount = extensions.size();
             createInfo.ppEnabledExtensionNames = extensions.data();
 
-            std::cout<<"Required glfw extensions:\n";
-            for (const auto & extension: extensions)
-                std::cout<<extension<<std::endl;
 
             // Validation layer?
             if (enableValidationLayers){
