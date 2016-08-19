@@ -102,7 +102,7 @@ Where the `pfnCallback` is a pointer to callback function, given as:
 
             return VK_FALSE;
         }
-   ```
+```
 Obviously, this function simply output the message to `cerr`. 
 
 ## createSurface
@@ -127,7 +127,34 @@ One last thing to check is swap chain support.
 Swap chain is an extensions since not all applications need one.  So we need to ask for compatibility. 
 * Swap chain presents frames
 
-// TODO: querySwapChainSupport()
+Swap chain support is defined by this `SwapChainSupportDetails` struct:
+```
+struct SwapChainSupportDetails {
+    VkSurfaceCapabilitiesKHR capabilities;
+    std::vector<VkSurfaceFormatKHR> formats;
+    std::vector<VkPresentModeKHR> presentModes;
+}
+```
+* [VkSurfaceCapabilitiesKHR](http://nopper.tv/Vulkan/1.0/VkSurfaceCapabilitiesKHR.html) defines the capability of the swap chain like `minImageCount`, `maxImageCount`, etc. 
+* `VkSurfaceFormatKHR` describes the format of each pixel and color space.
+* `VkPresentModeKHR` describes how the images are presented to the screen. 
+
+```
+typedef enum VkPresentModeKHR {
+    VK_PRESENT_MODE_IMMEDIATE_KHR = 0,
+    VK_PRESENT_MODE_MAILBOX_KHR = 1,
+    VK_PRESENT_MODE_FIFO_KHR = 2,
+    VK_PRESENT_MODE_FIFO_RELAXED_KHR = 3,
+} VkPresentModeKHR;
+```
+In this case, we only need to make sure that the supported format is not empty and the present mode is not empty. 
+```
+swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty()
+```
+
+By checking all of the devices, we simply pick the first supported device as our physical device. The next step is to create a logical device, which is an abstraction of the physical device. 
+
+##createLogicalDevice
 
 
 
@@ -141,5 +168,3 @@ Swap chain is an extensions since not all applications need one.  So we need to 
 
 
 
-
-	
