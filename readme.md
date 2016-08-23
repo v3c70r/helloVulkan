@@ -155,11 +155,98 @@ swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.prese
 By checking all of the devices, we simply pick the first supported device as our physical device. The next step is to create a logical device, which is an abstraction of the physical device. 
 
 ##createLogicalDevice
+A Vulkan [logical device](https://www.khronos.org/registry/vulkan/specs/1.0/xhtml/vkspec.html#VkDevice) is a connection to physical device. Similar to creating an instance, it requires a create info structure as well as a bunch of informations. 
+```
+typedef struct VkDeviceCreateInfo {
+    VkStructureType                    sType;
+    const void*                        pNext;
+    VkDeviceCreateFlags                flags;
+    uint32_t                           queueCreateInfoCount;
+    const VkDeviceQueueCreateInfo*     pQueueCreateInfos;
+    uint32_t                           enabledLayerCount;
+    const char* const*                 ppEnabledLayerNames;
+    uint32_t                           enabledExtensionCount;
+    const char* const*                 ppEnabledExtensionNames;
+    const VkPhysicalDeviceFeatures*    pEnabledFeatures;
+} VkDeviceCreateInfo;
+```
 
+### Queue Creation
+The first thing we need to specify in the struct is `VkDeviceQueueCreateInfo*`. 
+```
+typedef struct VkDeviceQueueCreateInfo {
+    VkStructureType             sType;
+    const void*                 pNext;
+    VkDeviceQueueCreateFlags    flags;
+    uint32_t                    queueFamilyIndex;
+    uint32_t                    queueCount;
+    const float*                pQueuePriorities;
+} VkDeviceQueueCreateInfo;
+```
+The queue family index we can extract from physical device queue families. In this case, we need to create one queue of `graphicsFamily` and one queue of `presentFamily`.
 
+### Features
+`VkphysicalDeviceFeatures` describes the features we want to use. Here we leave it to empty. 
 
+### Extensions and layers
+Extensions are the extensions we used earlier and the only surface used here is validation surface.
 
+### Get queue handle
+The last step is to get a queue handle for each queue family we want to use later. 
+```
+vkGetDeviceQueue(device, indices.graphicsFamily, 0, &graphicsQueue);
+vkGetDeviceQueue(device, indices.presentFamily, 0, &presentQueue);
+ ```
+## Create Swap Chain
 
+A swap chain is a series of images waiting to show to the screen, as well as a surface to draw on.  The create info is as following:
+```
+typedef struct VkSwapchainCreateInfoKHR {
+  VkStructureType sType;
+  const void* pNext;
+  VkSwapchainCreateFlagsKHR flags;
+  VkSurfaceKHR surface;
+  uint32_t minImageCount;
+  VkFormat imageFormat;
+  VkColorSpaceKHR imageColorSpace;
+  VkExtent2D imageExtent;
+  uint32_t imageArrayLayers;
+  VkImageUsageFlags imageUsage;
+  VkSharingMode imageSharingMode;
+  uint32_t queueFamilyIndexCount;
+  const uint32_t* pQueueFamilyIndices;
+  VkSurfaceTransformFlagBitsKHR preTransform;
+  VkCompositeAlphaFlagBitsKHR compositeAlpha;
+  VkPresentModeKHR presentMode;
+  VkBool32 clipped;
+  VkSwapchainKHR oldSwapchain;
+} VkSwapchainCreateInfoKHR
+```
+Firstly, swap chain support is tested to return a swap chain support details, like what we have done in [selecting physical device](#swap-chain-support). 
+
+Then we need to choose a format for surface. Each `VkSurfaceFormatKHR` entry contains `format` and `colorSpace` member. Here we want it to be `{VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR}`. Thus, if the surface has no restrictions on surface format, the preferred format will be used. Otherwise, a query is needed to determine the support. A swap chain also contains 
+
+Present mode is also checked. Present mode describes how the images in swap chain are presented to the surface. In this case, we choose `VK_PRESENT_MODE_MAILBOX_KHR`. 
+
+The size of framebuffer is described by `VkExtent2D`. We set it to window size. 
+
+Number of images in the swap chain is set to `minImageCount +1`.
+
+## Create Image Views
+
+## Create Render Pass
+
+## Create Graphics Pipeline
+
+## Create Framebuffers
+
+## Create Command pool
+
+## Create Command buffers
+
+## Create Semaphores
+
+## Render image
 
 
 
