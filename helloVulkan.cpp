@@ -567,6 +567,9 @@ class HelloTriangleApplication {
             VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
 
             uint32_t imageCount = swapChainSupport.capabilities.minImageCount +1;
+
+            std::cout<<"Min img count "<<swapChainSupport.capabilities.minImageCount<<std::endl;
+            std::cout<<"Max img count "<<swapChainSupport.capabilities.maxImageCount<<std::endl;
             if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount)
             {
                 imageCount = swapChainSupport.capabilities.maxImageCount;
@@ -591,6 +594,7 @@ class HelloTriangleApplication {
                 createInfo.queueFamilyIndexCount = 2;
                 createInfo.pQueueFamilyIndices = queueFamilyIndices;
             } else {
+                std::cout<<"Graphics == Present "<<std::endl;
                 createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
                 createInfo.queueFamilyIndexCount = 0; // Optional
                 createInfo.pQueueFamilyIndices = nullptr; // Optional

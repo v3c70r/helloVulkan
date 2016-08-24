@@ -232,9 +232,14 @@ The size of framebuffer is described by `VkExtent2D`. We set it to window size.
 
 Number of images in the swap chain is set to `minImageCount +1`.
 
+After creation of swap chain, a set of handles are created to retrieve images from swap chain. 
+
 ## Create Image Views
 
+`VkImageView` is a handle to view image. It describes how images are treated. i.e. the meta data of images. In this case, we create one image view for each images in the swap chain. 
 ## Create Render Pass
+
+A render pass consists of attachments, attachment references, subpass and subpass dependency.   
 
 ## Create Graphics Pipeline
 
