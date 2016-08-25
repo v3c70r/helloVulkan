@@ -196,7 +196,7 @@ The last step is to get a queue handle for each queue family we want to use late
 ```
 vkGetDeviceQueue(device, indices.graphicsFamily, 0, &graphicsQueue);
 vkGetDeviceQueue(device, indices.presentFamily, 0, &presentQueue);
- ```
+```
 ## Create Swap Chain
 
 A swap chain is a series of images waiting to show to the screen, as well as a surface to draw on.  The create info is as following:
@@ -239,24 +239,53 @@ After creation of swap chain, a set of handles are created to retrieve images fr
 `VkImageView` is a handle to view image. It describes how images are treated. i.e. the meta data of images. In this case, we create one image view for each images in the swap chain. 
 ## Create Render Pass
 
-A render pass consists of attachments, attachment references, subpass and subpass dependency.   
+A render pass consists of attachments, attachment references, subpass and subpass dependency.  Number of samples, how many attachments to draw and MSAA stuff. Similar to create rendering targets for framebuffers in OpenGL. 
+
+It also provide subpasses for better memory management[?].
 
 ## Create Graphics Pipeline
 
+1. Create shaders from *.spv.
+2. Specify vertex inputs. Empty for now. Probably gonna need more for mesh loading. Also specify how the vertices are assembled. 
+3. Specify view port, min and max depth and scissor extent. 
+4. Create rasterizer, which is in charge of culling modes, dpeth clamp, front face culling, etc. 
+5. Set MSAA details.
+6. Setup color blending. 
+7. Pipeline layouts, the uniforms that can be updated during the draw time.
+8. Use all of the informations to create a rendering pipeline. 
 ## Create Framebuffers
-
+Create a framebuffer for each image view in swap chain. When draw to a image on the swap chain, switch to that framebuffer. 
 ## Create Command pool
+The execution of commands are put in the command buffer. Command pool is used to allocate command buffers.
+```
+typedef struct VkCommandPoolCreateInfo {
+    VkStructureType             sType;
+    const void*                 pNext;
+    VkCommandPoolCreateFlags    flags;
+    uint32_t                    queueFamilyIndex;
+} VkCommandPoolCreateInfo;
+```
 
+Here queueFmailyIndex indicates that the command buffers in this command pool can only submit to one kind of queue on device. 
 ## Create Command buffers
+*Create a framebuffer for each image view in swap chain*
+Use `vkAllocateCommandBuffers` to allocate number of framebuffers. Then for each command buffer, begin command buffer with `vkBeginCommandBuffer` and of course the `VkCommandBufferBeginInfo`. Then start render pass with `VkRenderPassBeginInfo` and `vkCmdBeginRenderPass`. 
+### Record commands to command buffers
+```
+vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+vkCmdDraw(commandBuffers[i], 3, 1, 0, 0);
+vkCmdEndRenderPass(commandBuffers[i]);
+```
+Draw calls are recorded in the render buffer and executed later. 
+
 
 ## Create Semaphores
+There are two mutexes for image is ready from swap chain and image is ready to present to swap chain.  
 
 ## Render image
 
-
-
-
-
-
-
-
+1. Get image to draw from swap chain. 
+2. Submit command to execute
+3. Get present image in the present queue. 
+	

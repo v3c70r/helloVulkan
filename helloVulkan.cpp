@@ -271,7 +271,11 @@ class HelloTriangleApplication {
 
                 vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
                 vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
-                vkCmdDraw(commandBuffers[i], 3, 1, 0, 0);
+                vkCmdDraw(commandBuffers[i], 
+                        3,  // Number of vertices
+                        1,  // instance count
+                        0,  // First offset
+                        0); // First instance
                 vkCmdEndRenderPass(commandBuffers[i]);
                 if (vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS)
                     throw std::runtime_error("Failed to record command buffer!");
@@ -924,6 +928,7 @@ class HelloTriangleApplication {
                 glfwPollEvents();
                 drawFrame();
             }
+            vkDeviceWaitIdle(device);
         }
 
         void drawFrame(){
