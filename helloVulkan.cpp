@@ -281,13 +281,16 @@ class HelloTriangleApplication {
             
         }
 
-        void createVertexBuffer()
+        void createBuffer( VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, 
+                VDeleter<VkBuffer>& buffer, VDeleter<VkDeviceMemory> &bufferMemory)
         {
             VkBufferCreateInfo bufferInfo = {};
             bufferInfo.sType = ::VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-            bufferInfo.size = sizeof(vertices[0])*vertices.size();
-            bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+            bufferInfo.size = size;
+            bufferInfo.usage = usage;
             bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+            // Create buffer
             if (vkCreateBuffer(device, &bufferInfo, nullptr, &vertexBuffer) != VK_SUCCESS) 
                 throw std::runtime_error("failed to create vertex buffer!");
 
@@ -298,17 +301,90 @@ class HelloTriangleApplication {
             allocInfo.sType = ::VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
             allocInfo.allocationSize = memoryRequirements.size;
             allocInfo.memoryTypeIndex = findMemoryType(memoryRequirements.memoryTypeBits,
-                    ::VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+                    properties);
+
+            // Allocate memory
             if (::vkAllocateMemory(device, &allocInfo, nullptr, &vertexBufferMemory) != ::VK_SUCCESS)
                 throw( "Failed to allcate vertex buffer memory");
-            vkBindBufferMemory(device, vertexBuffer, vertexBufferMemory, 0);
 
+            // Bind buffer to memory
+            vkBindBufferMemory(device, vertexBuffer, vertexBufferMemory, 0);
+        }
+
+        // Copy from VK_BUFFER_USAGE_TRANSFER_SRC_BIT to VK_BUFFER_USAGE_DST_BIT buffer
+        void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
+        {
+            // Need to issue command to allocate buffer!
+            VkCommandBufferAllocateInfo allocInfo = {};
+            allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+            allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+            allocInfo.commandPool = commandPool;
+            allocInfo.commandBufferCount = 1;
+
+            VkCommandBuffer commandBuffer;
+            vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
+
+            // Record command
+            VkCommandBufferBeginInfo beginInfo = {};
+            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT; // Submit once and throw away
+
+            vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+            VkBufferCopy copyRegion = {};
+            copyRegion.srcOffset = 0; // Optional
+            copyRegion.dstOffset = 0; // Optional
+            copyRegion.size = size;
+            vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);   //do
+            // Stop recording
+            vkEndCommandBuffer(commandBuffer);
+
+            // Submit command to execute
+            VkSubmitInfo submitInfo = {};
+            submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            submitInfo.commandBufferCount = 1;
+            submitInfo.pCommandBuffers = &commandBuffer;
+
+            vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+            vkQueueWaitIdle(graphicsQueue);
+            vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+        }
+
+        void createVertexBuffer()
+        {
+            VkDeviceSize bufferSize = sizeof(vertices[0])*vertices.size();
+
+            /***********************
+            // Using unified memory
+            createBuffer(bufferSize, ::VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, ::VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | ::VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, vertexBuffer, vertexBufferMemory);
+            
             // OOoh, unified memory, good to know
-            std::cout<<"vertex buffer size: "<<bufferInfo.size<<std::endl;
             void *data;
-            ::vkMapMemory(device, vertexBufferMemory, 0, bufferInfo.size, 0, &data);
-            ::memcpy(data, vertices.data(), (size_t) bufferInfo.size);
+            ::vkMapMemory(device, vertexBufferMemory, 0, bufferSize, 0, &data);
+            ::memcpy(data, vertices.data(), (size_t) bufferSize);
             ::vkUnmapMemory(device, vertexBufferMemory);
+            **********************/
+
+            /****************/
+            // Using device only memory
+            // Host memory -> staging buffer -> vertex buffer
+
+            VDeleter<VkBuffer> stagingBuffer{device, vkDestroyBuffer};
+            VDeleter<VkDeviceMemory> stagingBufferMemory{device, vkFreeMemory};
+            createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+            void* data;
+            vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+            memcpy(data, vertices.data(), (size_t) bufferSize);
+            vkUnmapMemory(device, stagingBufferMemory);
+
+            createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
+            // Create vertex buffer
+            createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
+
+            // staging buffer -> vertex buffer
+            copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+
         }
 
         uint32_t findMemoryType(uint32_t typeFilter, ::VkMemoryPropertyFlags properties)
