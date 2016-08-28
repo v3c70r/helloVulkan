@@ -64,7 +64,7 @@ const std::vector<const char*> deviceExtensions = {
 };
 
 #ifdef NDEBUG
-const bool enableValidationLayers = false;
+const bool enableValidationLayers= false;
 #else
 const bool enableValidationLayers = true;
 #endif
@@ -278,38 +278,34 @@ class HelloTriangleApplication {
             createCommandBuffers();
 
             createSemaphores();
-            
-        }
 
-        void createBuffer( VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, 
-                VDeleter<VkBuffer>& buffer, VDeleter<VkDeviceMemory> &bufferMemory)
-        {
+        }
+        void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VDeleter<VkBuffer>& buffer, VDeleter<VkDeviceMemory>& bufferMemory) {
             VkBufferCreateInfo bufferInfo = {};
-            bufferInfo.sType = ::VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
             bufferInfo.size = size;
             bufferInfo.usage = usage;
             bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-            // Create buffer
-            if (vkCreateBuffer(device, &bufferInfo, nullptr, &vertexBuffer) != VK_SUCCESS) 
-                throw std::runtime_error("failed to create vertex buffer!");
+            if (vkCreateBuffer(device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
+                throw std::runtime_error("failed to create buffer!");
+            }
 
-            ::VkMemoryRequirements memoryRequirements;
-            vkGetBufferMemoryRequirements(device, vertexBuffer, &memoryRequirements);
+            VkMemoryRequirements memRequirements;
+            vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
 
-            ::VkMemoryAllocateInfo allocInfo = {};
-            allocInfo.sType = ::VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-            allocInfo.allocationSize = memoryRequirements.size;
-            allocInfo.memoryTypeIndex = findMemoryType(memoryRequirements.memoryTypeBits,
-                    properties);
+            VkMemoryAllocateInfo allocInfo = {};
+            allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+            allocInfo.allocationSize = memRequirements.size;
+            allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
 
-            // Allocate memory
-            if (::vkAllocateMemory(device, &allocInfo, nullptr, &vertexBufferMemory) != ::VK_SUCCESS)
-                throw( "Failed to allcate vertex buffer memory");
+            if (vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
+                throw std::runtime_error("failed to allocate buffer memory!");
+            }
 
-            // Bind buffer to memory
-            vkBindBufferMemory(device, vertexBuffer, vertexBufferMemory, 0);
+            vkBindBufferMemory(device, buffer, bufferMemory, 0);
         }
+
 
         // Copy from VK_BUFFER_USAGE_TRANSFER_SRC_BIT to VK_BUFFER_USAGE_DST_BIT buffer
         void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
@@ -378,7 +374,6 @@ class HelloTriangleApplication {
             memcpy(data, vertices.data(), (size_t) bufferSize);
             vkUnmapMemory(device, stagingBufferMemory);
 
-            createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
             // Create vertex buffer
             createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
 
@@ -529,9 +524,6 @@ class HelloTriangleApplication {
                 throw std::runtime_error("Failed to create shader module!");
         }
         void createGraphicsPipeline() {
-
-
-
             auto vertShaderCode = readFile("./shaders/vert.spv");
             auto fragShaderCode = readFile("./shaders/frag.spv");
             createShaderModule(vertShaderCode, vertShaderModule);
