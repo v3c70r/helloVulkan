@@ -1,6 +1,8 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
 
 #include <iostream>
 #include <vector>
@@ -11,6 +13,7 @@
 #include <limits>
 #include <fstream>
 #include <array>
+#include <chrono>
 
 const int WIDTH = 800;
 const int HEIGHT = 600;
@@ -53,9 +56,18 @@ struct Vertex{
 };
 
 const std::vector<Vertex> vertices = {
-    {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+};
+
+const std::vector<uint16_t> indices = {0,1,2,2,3,0};
+
+struct UniformBufferObject{
+    glm::mat4 model;
+    glm::mat4 view;
+    glm::mat4 proj;
 };
 
 
@@ -189,6 +201,7 @@ class HelloTriangleApplication {
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VDeleter<VkSurfaceKHR> surface{instance, vkDestroySurfaceKHR};
         VDeleter<VkSwapchainKHR> swapChain{device, vkDestroySwapchainKHR};
+        VDeleter<VkDescriptorSetLayout> descriptorSetLayout{device, vkDestroyDescriptorSetLayout};
         VDeleter<VkPipelineLayout> pipelineLayout{device, vkDestroyPipelineLayout};
 
         std::vector<VkImage> swapChainImages;
@@ -202,6 +215,8 @@ class HelloTriangleApplication {
         VDeleter<VkPipeline> graphicsPipeline{device, vkDestroyPipeline};
         VDeleter<VkCommandPool> commandPool{device, vkDestroyCommandPool};
         std::vector<VkCommandBuffer> commandBuffers;
+        VDeleter<VkDescriptorPool> descriptorPool{device, vkDestroyDescriptorPool};
+        VkDescriptorSet descriptorSet;
 
         // Two semaphores
         VDeleter<VkSemaphore> imageAvailableSemaphore{device, vkDestroySemaphore};
@@ -209,6 +224,16 @@ class HelloTriangleApplication {
 
         VDeleter<VkBuffer> vertexBuffer{device, vkDestroyBuffer};
         VDeleter<VkDeviceMemory> vertexBufferMemory{device, vkFreeMemory};
+        VDeleter<VkBuffer> indexBuffer{device, vkDestroyBuffer};
+        VDeleter<VkDeviceMemory> indexBufferMemory{device, vkFreeMemory};
+
+        // Uniform buffers
+
+        VDeleter<VkBuffer> uniformStagingBuffer{device, vkDestroyBuffer};
+        VDeleter<VkDeviceMemory> uniformStagingBufferMemory{device, vkFreeMemory};
+        VDeleter<VkBuffer> uniformBuffer{device, vkDestroyBuffer};
+        VDeleter<VkDeviceMemory> uniformBufferMemory{device, vkFreeMemory};
+
 
         VkQueue presentQueue;
         VkQueue graphicsQueue;
@@ -270,15 +295,93 @@ class HelloTriangleApplication {
             createSwapChain();
             createImageViews();
             createRenderPass();
+            createDescriptorSetLayout();
             createGraphicsPipeline();
             createFramebuffers();
             createCommandPool();
-
+            createIndexBuffer();
             createVertexBuffer();
+            createUniformBuffer();
+            createDescriptorPool();
+            createDescriptorSet();
             createCommandBuffers();
 
             createSemaphores();
 
+        }
+
+        void createDescriptorSet()
+        {
+            VkDescriptorSetLayout layouts[] = {descriptorSetLayout};
+            VkDescriptorSetAllocateInfo allocInfo = {};
+            allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            allocInfo.descriptorPool = descriptorPool;
+            allocInfo.descriptorSetCount = 1;
+            allocInfo.pSetLayouts = layouts;
+
+            if (vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet) != VK_SUCCESS) {
+                throw std::runtime_error("failed to allocate descriptor set!");
+            }
+
+            VkDescriptorBufferInfo bufferInfo = {};
+            bufferInfo.buffer = uniformBuffer;
+            bufferInfo.offset = 0;
+            bufferInfo.range = sizeof(UniformBufferObject);
+
+            VkWriteDescriptorSet descriptorWrite = {};
+            descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrite.dstSet = descriptorSet;
+            descriptorWrite.dstBinding = 0;
+            descriptorWrite.dstArrayElement = 0;
+            descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            descriptorWrite.descriptorCount = 1;
+            descriptorWrite.pBufferInfo = &bufferInfo;
+
+            vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+
+        }
+
+
+        void createDescriptorPool()
+        {
+            VkDescriptorPoolSize poolSize = {};
+            poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            poolSize.descriptorCount = 1;
+
+            VkDescriptorPoolCreateInfo poolInfo = {};
+            poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+            poolInfo.poolSizeCount = 1;
+            poolInfo.pPoolSizes = &poolSize;
+            poolInfo.maxSets = 1;
+
+            if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
+                throw std::runtime_error("failed to create descriptor pool!");
+            }
+        }
+
+        void createUniformBuffer(){
+            VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+
+            createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformStagingBuffer, uniformStagingBufferMemory);
+            createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, uniformBuffer, uniformBufferMemory);
+        }
+        void createDescriptorSetLayout()
+        {
+            VkDescriptorSetLayoutBinding uboLayoutBinding = {};
+            uboLayoutBinding.binding = 0;
+            uboLayoutBinding.descriptorCount = 1;
+            uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            uboLayoutBinding.pImmutableSamplers = nullptr;
+            uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+            VkDescriptorSetLayoutCreateInfo layoutInfo = {};
+            layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+            layoutInfo.bindingCount = 1;
+            layoutInfo.pBindings = &uboLayoutBinding;
+
+            if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
+                throw std::runtime_error("failed to create descriptor set layout!");
+            }
         }
         void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VDeleter<VkBuffer>& buffer, VDeleter<VkDeviceMemory>& bufferMemory) {
             VkBufferCreateInfo bufferInfo = {};
@@ -382,6 +485,23 @@ class HelloTriangleApplication {
 
         }
 
+        void createIndexBuffer()
+        {
+            ::VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+            ::VDeleter<VkBuffer> stagingBuffer{ device, ::vkDestroyBuffer};
+            VDeleter<::VkDeviceMemory> stagingBufferMemory{device, vkFreeMemory};
+            createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+            void* data;
+            vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+            memcpy(data, indices.data(), (size_t) bufferSize);
+            vkUnmapMemory(device, stagingBufferMemory);
+
+            createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
+
+            copyBuffer(stagingBuffer, indexBuffer, bufferSize);
+        }
+
+
         uint32_t findMemoryType(uint32_t typeFilter, ::VkMemoryPropertyFlags properties)
         {
             ::VkPhysicalDeviceMemoryProperties memProperties;
@@ -459,11 +579,17 @@ class HelloTriangleApplication {
                 VkBuffer vertexBuffers[] = {vertexBuffer};
                 VkDeviceSize offsets[] = {0};
                 ::vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffers, offsets);
-                vkCmdDraw(commandBuffers[i], 
-                        3,  // Number of vertices
-                        1,  // instance count
-                        0,  // First offset
-                        0); // First instance
+                ::vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, ::VK_INDEX_TYPE_UINT16);
+                ::vkCmdBindDescriptorSets(commandBuffers[i], ::VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+                //vkCmdDraw(commandBuffers[i], 
+                //        3,  // Number of vertices
+                //        1,  // instance count
+                //        0,  // First offset
+                //        0); // First instance
+                
+                // Draw with index buffer
+                vkCmdDrawIndexed(commandBuffers[i],
+                        indices.size(),1,0,0,0);
                 vkCmdEndRenderPass(commandBuffers[i]);
                 if (vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS)
                     throw std::runtime_error("Failed to record command buffer!");
@@ -594,7 +720,7 @@ class HelloTriangleApplication {
             rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
             rasterizer.lineWidth = 1.0f;
             rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-            rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+            rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 
             rasterizer.depthBiasEnable = VK_FALSE;
             rasterizer.depthBiasConstantFactor = 0.0f; // Optional
@@ -647,10 +773,11 @@ class HelloTriangleApplication {
              */
 
             // Pipeline layout, i.e. uniforms
+            VkDescriptorSetLayout setLayouts[] = {descriptorSetLayout};
             VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
             pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-            pipelineLayoutInfo.setLayoutCount = 0; // Optional
-            pipelineLayoutInfo.pSetLayouts = nullptr; // Optional
+            pipelineLayoutInfo.setLayoutCount = 1; // Optional
+            pipelineLayoutInfo.pSetLayouts = setLayouts; // Optional
             pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
             pipelineLayoutInfo.pPushConstantRanges = 0; // Optional
 
@@ -1107,9 +1234,32 @@ class HelloTriangleApplication {
         void mainLoop() {
             while (!glfwWindowShouldClose(window)) {
                 glfwPollEvents();
+                updateUniformBuffer();
                 drawFrame();
             }
             vkDeviceWaitIdle(device);
+        }
+
+        void updateUniformBuffer()
+        {
+            static auto startTime = std::chrono::high_resolution_clock::now();
+            auto currentTime = std::chrono::high_resolution_clock::now();
+            float time = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime).count() /  1000.0f;
+
+            // Define matrices
+            UniformBufferObject ubo = {};
+            ubo.model = glm::rotate( glm::mat4(), time*glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+            ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+            ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width/(float)swapChainExtent.height, 0.1f, 10.f);
+            // Flip Y coordinate in clip space !!
+            // WTF, different from OpenGL
+            ubo.proj[1][1] *= -1;
+            void* data;
+            vkMapMemory(device, uniformStagingBufferMemory, 0, sizeof(ubo), 0, &data);
+            memcpy(data, &ubo, sizeof(ubo));
+            vkUnmapMemory(device, uniformStagingBufferMemory);
+
+            copyBuffer(uniformStagingBuffer, uniformBuffer, sizeof(ubo));
         }
 
         void drawFrame(){
