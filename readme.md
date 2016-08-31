@@ -288,4 +288,50 @@ There are two mutexes for image is ready from swap chain and image is ready to p
 1. Get image to draw from swap chain. 
 2. Submit command to execute
 3. Get present image in the present queue. 
-	
+
+# Buffers
+Buffers are memory allocated on video memory. The host code allocates device memory and pass data threw either shared memory or staging memory. The former memory allows both host and device to access and the later method can be accessed by device only. 
+## Buffer creation
+Creation of buffer involves creating buffer and allocating memory. 
+### Create buffer
+Buffers are the linear arrays of data created by `vkCreateBuffer` with following create info:
+```
+typedef struct VkBufferCreateInfo {
+    VkStructureType        sType;
+    const void*            pNext;
+    VkBufferCreateFlags    flags;
+    VkDeviceSize           size;
+    VkBufferUsageFlags     usage;
+    VkSharingMode          sharingMode;
+    uint32_t               queueFamilyIndexCount;
+    const uint32_t*        pQueueFamilyIndices;
+} VkBufferCreateInfo;
+```
+* *flags* is a bitmask describing additional parameters of the buffer.
+* *size* is the size in bytes of the buffer to be created.
+* *usage* is a bitmask describing the allowed usages of the buffer.
+* sharingMode is the sharing mode of the buffer when it will be accessed by multiple queue families.
+* queueFamilyIndexCount is the number of entries in the pQueueFamilyIndices array. 
+* pQueueFamilyIndices is a list of queue families that will access this buffer (ignored if sharingMode is not VK_SHARING_MODE_CONCURRENT). 
+### Get buffer requirement
+`vkGetBufferMemoryRequirements` gets the requirement of create buffer. Then we need to 
+### Allocate memory
+Buffer memory describes how the memory is going to be used. 
+```
+typedef struct VkMemoryAllocateInfo {
+    VkStructureType    sType;
+    const void*        pNext;
+    VkDeviceSize       allocationSize;
+    uint32_t           memoryTypeIndex;
+} VkMemoryAllocateInfo;
+```
+## Attribute buffers
+As same in OpenGL, attribute buffers are submitted to graphics for each vertex. These buffers are uploaded to assign to each vertex. 
+### Vertex buffers
+### Index buffers
+## Uniform buffers
+
+
+
+
+
