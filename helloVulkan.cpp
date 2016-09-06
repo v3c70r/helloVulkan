@@ -17,6 +17,7 @@
 #include <array>
 #include <chrono>
 
+
 const int WIDTH = 800;
 const int HEIGHT = 600;
 
@@ -91,7 +92,6 @@ struct UniformBufferObject{
 const std::vector<const char*> deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME
 };
-
 #ifdef NDEBUG
 const bool enableValidationLayers= false;
 #else
@@ -329,21 +329,19 @@ class HelloTriangleApplication {
             createImageViews();
             createRenderPass();
             createDescriptorSetLayout();
-            createCommandPool();
             createGraphicsPipeline();
+            createCommandPool();
             createDepthResources();
             createFramebuffers();
             createTextureImage();
             createTextureImageView();
             createTextureSampler();
-            createIndexBuffer();
             createVertexBuffer();
+            createIndexBuffer();
             createUniformBuffer();
             createDescriptorPool();
             createDescriptorSet();
-
             createCommandBuffers();
-
             createSemaphores();
 
         }
@@ -1314,18 +1312,14 @@ class HelloTriangleApplication {
             uint32_t layerCount;
             // Get number of layers
             vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
-
             std::vector<VkLayerProperties> availableLayers(layerCount);
             // Write validation stuff to vector
             vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
 
 
-
             // Check if validation layer is in available layers
             for (const char* layerName : validationLayers) {
-
                 bool layerFound = false;
-
                 for (const auto& layerProperties : availableLayers) {
                     if (strcmp(layerName, layerProperties.layerName) == 0) {
                         layerFound = true;
