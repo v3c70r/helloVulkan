@@ -1,12 +1,11 @@
 CXX=clang++
-FLAGS=-Wall -std=c++11 -pthread -g
+FLAGS=-Wall -std=c++11 -pthread -O3
 SOURCE=helloVulkan.cpp
 
 # Set your own SDK file path
 SDK_PATH=/home/tsing/tools/VulkanSDK/1.0.24.0
 
 INCLUDES=$(SDK_PATH)/x86_64/include
-export VK_LAYER_PATH=$(SDK_PATH)/x86_64/etc/explicit_layer.d
 LIBS=$(shell pkg-config --static --libs glfw3) -L$(SDK_PATH)/x86_64/lib  -lvulkan
 
 run.sh: helloVulkan
