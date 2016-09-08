@@ -1,6 +1,8 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+#define GLM_HAS_CXX11_STL
 #include <glm/glm.hpp>
+#include <glm/gtx/hash.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -8,6 +10,7 @@
 #include "tiny_obj_loader.h"
 
 
+#include <unordered_map>
 #include <iostream>
 #include <vector>
 #include <stdexcept>
@@ -45,6 +48,10 @@ struct Vertex{
         return bindingDescription;
     }
 
+    bool operator==(const Vertex& other) const{
+        return pos == other.pos && color == other.color && texCoord == other.texCoord;
+    }
+
     static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions()
     {
         // Get attribute locations
@@ -67,6 +74,16 @@ struct Vertex{
         return attributeDescriptions;
     }
 };
+
+namespace std {
+    template <> struct hash<Vertex> {
+        size_t operator()(Vertex const& vertex) const{
+            return ((hash<glm::vec3>()(vertex.pos) ^
+                        (hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^ 
+                (hash<glm::vec2>()(vertex.texCoord) << 1);
+        }
+    };
+}
 
 //const std::vector<Vertex> vertices = {
 //    {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
@@ -362,20 +379,25 @@ class HelloTriangleApplication {
             std::string err;
             if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &err, MODEL_PATH.c_str()))
                 throw std::runtime_error(err);
+            std::unordered_map<Vertex, int> uniqueVertices = {};
             for (const auto& shape: shapes){
                 for (const auto& index: shape.mesh.indices){
                     Vertex vertex = {};
                     vertex.pos = {
-                        attrib.vertices[ 3 * index.vertex_index + 0],
-                        attrib.vertices[ 3 * index.vertex_index + 1],
-                        attrib.vertices[ 3 * index.vertex_index + 2],
+                        attrib.vertices[3 * index.vertex_index + 0],
+                        attrib.vertices[3 * index.vertex_index + 1],
+                        attrib.vertices[3 * index.vertex_index + 2]
                     };
+
                     vertex.texCoord = {
                         attrib.texcoords[2 * index.texcoord_index + 0],
-                        1.0f - attrib.texcoords[2 * index.texcoord_index + 1],
+                        1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
                     };
-                    vertices.push_back(vertex);
-                    indices.push_back(indices.size());
+                    if (uniqueVertices.count(vertex) == 0){
+                        uniqueVertices[vertex] = vertices.size();
+                        vertices.push_back(vertex);
+                    }
+                    indices.push_back(uniqueVertices[vertex]);
                 }
             }
         }

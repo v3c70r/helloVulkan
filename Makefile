@@ -1,5 +1,5 @@
-CXX=clang++
-FLAGS=-Wall -std=c++11 -pthread -O3
+CXX=g++
+FLAGS=-std=c++11 -Wall -pthread -O3
 SOURCE=helloVulkan.cpp
 
 # Set your own SDK file path
