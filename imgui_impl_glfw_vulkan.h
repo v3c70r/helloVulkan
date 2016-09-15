@@ -6,7 +6,7 @@
 
 struct GLFWwindow;
 
-#define IMGUI_VK_QUEUED_FRAMES 2
+#define IMGUI_VK_QUEUED_FRAMES 1
 
 struct ImGui_ImplGlfwVulkan_Init_Data
 {

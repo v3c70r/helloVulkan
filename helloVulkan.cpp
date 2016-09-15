@@ -9,6 +9,9 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
 
+#include "imgui/imgui.h"
+#include "imgui_impl_glfw_vulkan.h"
+
 
 #include <unordered_map>
 #include <iostream>
@@ -22,6 +25,13 @@
 #include <array>
 #include <chrono>
 
+static void check_vk_result(VkResult err)
+{
+    if (err == 0) return;
+    printf("VkResult %d\n", err);
+    if (err < 0) 
+        abort();
+}
 
 const int WIDTH = 800;
 const int HEIGHT = 600;
@@ -167,6 +177,7 @@ void DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT
 struct QueueFamilyIndices {
     int graphicsFamily = -1;
     int presentFamily = -1;
+    int computeFamily = -1;
 
     bool isComplete() {
         return graphicsFamily >= 0 && 
@@ -231,6 +242,8 @@ class HelloTriangleApplication {
             initWindow();
             initVulkan();
             mainLoop();
+            ImGui_ImplGlfwVulkan_Shutdown();
+
         }
 
     private:
@@ -343,6 +356,57 @@ class HelloTriangleApplication {
 
         }
 
+        void initGUI()
+        {
+            ::ImGui_ImplGlfwVulkan_Init_Data initData={};
+            initData.allocator = nullptr;
+            initData.gpu = physicalDevice;
+            initData.device = device;
+            initData.render_pass = renderPass;
+            initData.pipeline_cache = nullptr;
+            initData.descriptor_pool = descriptorPool;
+            initData.check_vk_result = check_vk_result;
+            ImGui_ImplGlfwVulkan_Init(window, true, &initData);
+
+            // Upload Fonts
+            {
+                VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+                ImGui_ImplGlfwVulkan_CreateFontsTexture(commandBuffer);
+                endSingleTimeCommands(commandBuffer);
+                ImGui_ImplGlfwVulkan_InvalidateFontUploadObjects();
+
+            //    VkResult err;
+            //    err = vkResetCommandPool(device, commandPool, 0);
+            //    check_vk_result(err);
+            //    VkCommandBufferBeginInfo begin_info = {};
+            //    begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            //    begin_info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+            //    err = vkBeginCommandBuffer(commandBuffers[0], &begin_info);
+            //    check_vk_result(err);
+
+            //    ImGui_ImplGlfwVulkan_CreateFontsTexture(commandBuffers[0]);
+
+            //    VkSubmitInfo end_info = {};
+            //    end_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            //    end_info.commandBufferCount = 1;
+            //    end_info.pCommandBuffers = &commandBuffers[0];
+            //    err = vkEndCommandBuffer(commandBuffers[0]);
+            //    check_vk_result(err);
+            //    err = vkQueueSubmit(graphicsQueue, 1, &end_info, VK_NULL_HANDLE);
+            //    check_vk_result(err);
+
+                vkDeviceWaitIdle(device);
+            }
+
+            bool show_test_window = true;
+            bool show_another_window = false;
+            ImVec4 clear_color = ImColor(114, 144, 154);
+
+
+                
+
+        }
+
         void initVulkan() {
             createInstance();
             setupDebugCallback();
@@ -366,6 +430,7 @@ class HelloTriangleApplication {
             createUniformBuffer();
             createDescriptorPool();
             createDescriptorSet();
+            initGUI();
             createCommandBuffers();
             createSemaphores();
 
@@ -538,17 +603,40 @@ class HelloTriangleApplication {
 
         void createDescriptorPool()
         {
+            /*
             std::array<VkDescriptorPoolSize, 2> poolSizes = {};
             poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            poolSizes[0].descriptorCount = 1;
+            poolSizes[0].descriptorCount = 100;
             poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            poolSizes[1].descriptorCount = 1;
+            poolSizes[1].descriptorCount = 100;
 
             VkDescriptorPoolCreateInfo poolInfo = {};
             poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
             poolInfo.poolSizeCount = poolSizes.size();
             poolInfo.pPoolSizes = poolSizes.data();
-            poolInfo.maxSets = 1;
+            poolInfo.maxSets = 2*100;
+            */
+            // Reconfig
+            VkDescriptorPoolSize poolSizes[11] = 
+            {
+                { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
+                { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
+                { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
+                { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
+                { VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
+                { VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
+                { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
+                { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
+                { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
+                { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
+                { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 }
+            };
+            VkDescriptorPoolCreateInfo poolInfo = {};
+            poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+            poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+            poolInfo.maxSets = 1000 * 11;
+            poolInfo.poolSizeCount = 11;
+            poolInfo.pPoolSizes = poolSizes;
 
             if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
                 throw std::runtime_error("failed to create descriptor pool!");
@@ -797,6 +885,11 @@ class HelloTriangleApplication {
                 // Draw with index buffer
                 vkCmdDrawIndexed(commandBuffers[i],
                         indices.size(),1,0,0,0);
+                ImGui_ImplGlfwVulkan_NewFrame();
+                ImGui::Text("test");
+                // Record ImGui Buffer?
+                ImGui_ImplGlfwVulkan_Render(commandBuffers[i]);
+
                 vkCmdEndRenderPass(commandBuffers[i]);
                 if (vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS)
                     throw std::runtime_error("Failed to record command buffer!");
@@ -1235,12 +1328,16 @@ class HelloTriangleApplication {
 
         void createLogicalDevice(){
 
-            // Create a queue
+            // Query queue familise
             QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
 
             std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+
+            // Set contains unique set of numbers
+            // Fall into the same queue here
             std::set<int> uniqueQueueFamilise = {indices.graphicsFamily, indices.presentFamily};
 
+            // Create two queues for graphics family and indices.presentFamily
             for (int queueFamily: uniqueQueueFamilise) {
 
                 VkDeviceQueueCreateInfo queueCreateInfo = {};
@@ -1259,6 +1356,7 @@ class HelloTriangleApplication {
             createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
             createInfo.pQueueCreateInfos = queueCreateInfos.data();
             createInfo.queueCreateInfoCount = (uint32_t)queueCreateInfos.size();
+            std::cout<<"Queue numbers "<<(uint32_t)queueCreateInfos.size()<<std::endl;
             createInfo.pEnabledFeatures = &deviceFeatures;
 
             // Add extensiosns
@@ -1295,12 +1393,17 @@ class HelloTriangleApplication {
             for (const auto& queueFamily : queueFamilies) {
                 if (queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
                     indices.graphicsFamily = i;
+                    std::cout<<"Graphics family at "<<i<<std::endl;
                 }
                 if (queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT) {
+
+                    std::cout<<"Compute family at "<<i<<std::endl;
                 }
                 if (queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT) {
+                    std::cout<<"transfer family at "<<i<<std::endl;
                 }
                 if (queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) {
+                    std::cout<<"queue_sparse family at "<<i<<std::endl;
                 }
                 VkBool32 presentSupport = false;
                 vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
@@ -1407,7 +1510,7 @@ class HelloTriangleApplication {
             // Construct VkInstanceCreateInfo struct with VkApplicationInfo
             VkInstanceCreateInfo createInfo = {};
             createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-            createInfo.pApplicationInfo = &appInfo;
+            //createInfo.pApplicationInfo = &appInfo;
 
             // Get extensions
             //unsigned int glfwExtensionCount = 0;
@@ -1451,6 +1554,7 @@ class HelloTriangleApplication {
             while (!glfwWindowShouldClose(window)) {
                 glfwPollEvents();
                 updateUniformBuffer();
+                ImGui_ImplGlfwVulkan_NewFrame();
                 drawFrame();
             }
             vkDeviceWaitIdle(device);
@@ -1481,6 +1585,8 @@ class HelloTriangleApplication {
 
         void drawFrame(){
             uint32_t imageIndex;
+            
+            // Grab next image from swapchain
             vkAcquireNextImageKHR(device, swapChain, std::numeric_limits<uint64_t>::max(), imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
 
             VkSubmitInfo submitInfo = {};
@@ -1515,6 +1621,7 @@ class HelloTriangleApplication {
 
             presentInfo.pImageIndices = &imageIndex;
 
+            // Show this image
             vkQueuePresentKHR(presentQueue, &presentInfo);
             
 
