@@ -1,5 +1,5 @@
 CXX=g++
-FLAGS=-std=c++11 -Wall -pthread -O3
+FLAGS=-std=c++11 -Wall -pthread -g
 SOURCE=helloVulkan.cpp imgui_impl_glfw_vulkan.cpp imgui/*.cpp
 
 # Set your own SDK file path

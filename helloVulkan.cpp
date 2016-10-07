@@ -216,7 +216,6 @@ class VDeleter {
         }
 
         T* operator &() {
-            cleanup();
             return &object;
         }
 
@@ -247,11 +246,13 @@ class HelloTriangleApplication {
         }
 
     private:
+
+        // TODO: Investigate the order of destructions
         VDeleter<VkInstance> instance {vkDestroyInstance};
-        VDeleter<VkDevice> device{vkDestroyDevice};
         VDeleter<VkDebugReportCallbackEXT> callback{instance, DestroyDebugReportCallbackEXT};
-        VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VDeleter<VkSurfaceKHR> surface{instance, vkDestroySurfaceKHR};
+        VDeleter<VkDevice> device{vkDestroyDevice};
+        VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VDeleter<VkSwapchainKHR> swapChain{device, vkDestroySwapchainKHR};
         VDeleter<VkDescriptorSetLayout> descriptorSetLayout{device, vkDestroyDescriptorSetLayout};
         VDeleter<VkPipelineLayout> pipelineLayout{device, vkDestroyPipelineLayout};
@@ -264,13 +265,17 @@ class HelloTriangleApplication {
         VDeleter<VkShaderModule> vertShaderModule{device, vkDestroyShaderModule};
         VDeleter<VkShaderModule> fragShaderModule{device, vkDestroyShaderModule};
         VDeleter<VkRenderPass> renderPass{device, vkDestroyRenderPass};
+        VDeleter<VkRenderPass> guiRenderPass{device, vkDestroyRenderPass};
         VDeleter<VkPipeline> graphicsPipeline{device, vkDestroyPipeline};
         VDeleter<VkCommandPool> commandPool{device, vkDestroyCommandPool};
+        VDeleter<VkCommandPool> dynamicCommandPool{device, vkDestroyCommandPool};   // This command pool contains buffers to draw frame dynamicly
         std::vector<VkCommandBuffer> commandBuffers;
+        VkCommandBuffer dynamicCommandBuffer;
 
         // Two semaphores
         VDeleter<VkSemaphore> imageAvailableSemaphore{device, vkDestroySemaphore};
         VDeleter<VkSemaphore> renderFinishedSemaphore{device, vkDestroySemaphore};
+        VDeleter<VkSemaphore> staticRenderFinishedSemaphore{device, vkDestroySemaphore};
 
         // Vertex buffer and index buffer
         std::vector<Vertex> vertices;
@@ -358,11 +363,58 @@ class HelloTriangleApplication {
 
         void initGUI()
         {
+            VkAttachmentDescription attachment = {};
+            attachment.format = swapChainImageFormat;
+            attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+            attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+            attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+            // Depth attachment
+            VkAttachmentDescription depthAttachment = {};
+            depthAttachment.format = findDepthFormat();
+            depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+            depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+            depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            depthAttachment.initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+
+
+            VkAttachmentReference color_attachment = {};
+            color_attachment.attachment = 0;
+            color_attachment.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+            VkAttachmentReference depthAttachmentRef = {};
+            depthAttachmentRef.attachment = 1;
+            depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+            VkSubpassDescription subpass = {};
+            subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+            subpass.colorAttachmentCount = 1;
+            subpass.pColorAttachments = &color_attachment;
+            subpass.pDepthStencilAttachment = &depthAttachmentRef;
+
+            std::array<VkAttachmentDescription, 2> attachments = {attachment, depthAttachment};
+            VkRenderPassCreateInfo info = {};
+            info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+            info.attachmentCount = attachments.size();
+            info.pAttachments = attachments.data();
+            info.subpassCount = 1;
+            info.pSubpasses = &subpass;
+            if (vkCreateRenderPass(device, &info, nullptr, &guiRenderPass) != VK_SUCCESS)
+                throw std::runtime_error( "Failed to create GUI renderpass");
+            // Create render pass
             ::ImGui_ImplGlfwVulkan_Init_Data initData={};
             initData.allocator = nullptr;
             initData.gpu = physicalDevice;
             initData.device = device;
-            initData.render_pass = renderPass;
+            initData.render_pass = guiRenderPass;
             initData.pipeline_cache = nullptr;
             initData.descriptor_pool = descriptorPool;
             initData.check_vk_result = check_vk_result;
@@ -374,27 +426,6 @@ class HelloTriangleApplication {
                 ImGui_ImplGlfwVulkan_CreateFontsTexture(commandBuffer);
                 endSingleTimeCommands(commandBuffer);
                 ImGui_ImplGlfwVulkan_InvalidateFontUploadObjects();
-
-            //    VkResult err;
-            //    err = vkResetCommandPool(device, commandPool, 0);
-            //    check_vk_result(err);
-            //    VkCommandBufferBeginInfo begin_info = {};
-            //    begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-            //    begin_info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-            //    err = vkBeginCommandBuffer(commandBuffers[0], &begin_info);
-            //    check_vk_result(err);
-
-            //    ImGui_ImplGlfwVulkan_CreateFontsTexture(commandBuffers[0]);
-
-            //    VkSubmitInfo end_info = {};
-            //    end_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-            //    end_info.commandBufferCount = 1;
-            //    end_info.pCommandBuffers = &commandBuffers[0];
-            //    err = vkEndCommandBuffer(commandBuffers[0]);
-            //    check_vk_result(err);
-            //    err = vkQueueSubmit(graphicsQueue, 1, &end_info, VK_NULL_HANDLE);
-            //    check_vk_result(err);
-
                 vkDeviceWaitIdle(device);
             }
 
@@ -821,7 +852,9 @@ class HelloTriangleApplication {
             VkSemaphoreCreateInfo semaphoreInfo = {};
             semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
             if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphore) != VK_SUCCESS ||
-                    vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphore) != VK_SUCCESS) {
+                    vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphore) != VK_SUCCESS ||
+                    vkCreateSemaphore(device, &semaphoreInfo, nullptr, &staticRenderFinishedSemaphore) != VK_SUCCESS 
+                    ) {
 
                 throw std::runtime_error("failed to create semaphores!");
             }
@@ -832,6 +865,7 @@ class HelloTriangleApplication {
 
             if (commandBuffers.size()>0){
                 vkFreeCommandBuffers(device, commandPool, commandBuffers.size(), commandBuffers.data());
+                vkFreeCommandBuffers(device, dynamicCommandPool, 1, &dynamicCommandBuffer);
             }
 
             // https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Command_buffers
@@ -844,6 +878,12 @@ class HelloTriangleApplication {
 
             if (vkAllocateCommandBuffers(device, &allocInfo, commandBuffers.data()) != VK_SUCCESS)
                 throw std::runtime_error("failed to allocate command buffers!");
+
+            allocInfo.commandPool = dynamicCommandPool;
+            allocInfo.commandBufferCount = 1;
+            if (vkAllocateCommandBuffers(device, &allocInfo, &dynamicCommandBuffer) != VK_SUCCESS)
+                throw std::runtime_error("failed to allocate command buffers!");
+
 
             // Record command buffer
             for (size_t i=0; i < commandBuffers.size(); i++)
@@ -885,10 +925,7 @@ class HelloTriangleApplication {
                 // Draw with index buffer
                 vkCmdDrawIndexed(commandBuffers[i],
                         indices.size(),1,0,0,0);
-                ImGui_ImplGlfwVulkan_NewFrame();
-                ImGui::Text("test");
-                // Record ImGui Buffer?
-                ImGui_ImplGlfwVulkan_Render(commandBuffers[i]);
+
 
                 vkCmdEndRenderPass(commandBuffers[i]);
                 if (vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS)
@@ -908,7 +945,10 @@ class HelloTriangleApplication {
             if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS)
                 throw std::runtime_error("Failed to create command pool!");
 
-            // Command buffer
+            poolInfo.flags |= ::VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+            if (vkCreateCommandPool(device, &poolInfo, nullptr, &dynamicCommandPool) != VK_SUCCESS)
+                throw std::runtime_error("Failed to create command pool!");
+
             
         }
 
@@ -1510,7 +1550,7 @@ class HelloTriangleApplication {
             // Construct VkInstanceCreateInfo struct with VkApplicationInfo
             VkInstanceCreateInfo createInfo = {};
             createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-            //createInfo.pApplicationInfo = &appInfo;
+            createInfo.pApplicationInfo = &appInfo;
 
             // Get extensions
             //unsigned int glfwExtensionCount = 0;
@@ -1588,10 +1628,13 @@ class HelloTriangleApplication {
             
             // Grab next image from swapchain
             vkAcquireNextImageKHR(device, swapChain, std::numeric_limits<uint64_t>::max(), imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+                ImGui_ImplGlfwVulkan_NewFrame();
 
+            // Draw static command buffers
             VkSubmitInfo submitInfo = {};
             submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
+            //Submit recorded command buffer
             VkSemaphore waitSemaphores[] = {imageAvailableSemaphore};
             VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
             submitInfo.waitSemaphoreCount = 1;
@@ -1602,18 +1645,76 @@ class HelloTriangleApplication {
             submitInfo.pCommandBuffers = &commandBuffers[imageIndex];
 
             // Signal when command buffers finished execution
-            VkSemaphore signalSemaphores[] = {renderFinishedSemaphore};
+            VkSemaphore signalSemaphores[] = {staticRenderFinishedSemaphore};
             submitInfo.signalSemaphoreCount = 1;
             submitInfo.pSignalSemaphores = signalSemaphores;
             if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS) {
                 throw std::runtime_error("failed to submit draw command buffer!");
             }
 
+            // Finished rendering recorded command buffer, now, create a new command
+            // buffer to render dynamic stuffs.
+            
+                // reset command buffer
+                ::vkResetCommandBuffer(dynamicCommandBuffer, 0);
+                ///// Start recording
+                ::VkCommandBufferBeginInfo cmdBufferInfo = {};
+                cmdBufferInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+                cmdBufferInfo.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+                if (vkBeginCommandBuffer(dynamicCommandBuffer, &cmdBufferInfo) != VK_SUCCESS)
+                    throw std::runtime_error("FAiled to start command buffer");
+
+                //TODO: How to not clean the framebuffer
+                VkRenderPassBeginInfo info = {};
+                info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+                info.renderPass = guiRenderPass;
+                info.framebuffer = swapChainFramebuffers[imageIndex];
+                info.renderArea.extent = swapChainExtent;
+                std::array<VkClearValue, 2> clearValues = {};
+                clearValues[0].color = {0.0f, 0.0f, 0.0f, 1.0f};
+                clearValues[1].depthStencil = {1.0f, 0};
+                info.clearValueCount = clearValues.size();
+                info.pClearValues = clearValues.data();
+                vkCmdBeginRenderPass(dynamicCommandBuffer, &info, VK_SUBPASS_CONTENTS_INLINE);
+
+                ImGui::Text("HELLO");
+                ImGui_ImplGlfwVulkan_Render(dynamicCommandBuffer);
+
+                
+                vkCmdEndRenderPass(dynamicCommandBuffer);
+                ::vkEndCommandBuffer(dynamicCommandBuffer);
+
+                //////////// Finished recording
+
+
+                submitInfo = {};
+                submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+                submitInfo.commandBufferCount = 1;
+                submitInfo.pCommandBuffers = &dynamicCommandBuffer;
+
+
+                // Wait for semaphore
+                submitInfo.waitSemaphoreCount = 1;
+                submitInfo.pWaitSemaphores = signalSemaphores;
+                submitInfo.pWaitDstStageMask = waitStages;
+
+                // Signal semaphore
+                VkSemaphore dynamicSignal[] = {renderFinishedSemaphore};
+                submitInfo.signalSemaphoreCount = 1;
+                submitInfo.pSignalSemaphores = dynamicSignal;
+
+                if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS) {
+                    throw std::runtime_error("failed to submit draw command buffer!");
+                }
+                //vkDeviceWaitIdle(device);
+
+
             VkPresentInfoKHR presentInfo = {};
             presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 
+
             presentInfo.waitSemaphoreCount = 1;
-            presentInfo.pWaitSemaphores = signalSemaphores;
+            presentInfo.pWaitSemaphores = dynamicSignal;
 
             VkSwapchainKHR swapChains[] = {swapChain};
             presentInfo.swapchainCount = 1;
@@ -1623,8 +1724,6 @@ class HelloTriangleApplication {
 
             // Show this image
             vkQueuePresentKHR(presentQueue, &presentInfo);
-            
-
      
         }
 
