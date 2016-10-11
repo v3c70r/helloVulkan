@@ -377,14 +377,12 @@ class HelloTriangleApplication {
             VkAttachmentDescription depthAttachment = {};
             depthAttachment.format = findDepthFormat();
             depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-            depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+            depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
             depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
             depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
             depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
             depthAttachment.initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
             depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-
 
             VkAttachmentReference color_attachment = {};
             color_attachment.attachment = 0;
@@ -429,9 +427,9 @@ class HelloTriangleApplication {
                 vkDeviceWaitIdle(device);
             }
 
-            bool show_test_window = true;
-            bool show_another_window = false;
-            ImVec4 clear_color = ImColor(114, 144, 154);
+            //bool show_test_window = true;
+            //bool show_another_window = false;
+            //ImVec4 clear_color = ImColor(114, 144, 154);
 
 
                 
@@ -1669,6 +1667,7 @@ class HelloTriangleApplication {
                 info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
                 info.renderPass = guiRenderPass;
                 info.framebuffer = swapChainFramebuffers[imageIndex];
+                info.renderArea.offset = {0,0};
                 info.renderArea.extent = swapChainExtent;
                 std::array<VkClearValue, 2> clearValues = {};
                 clearValues[0].color = {0.0f, 0.0f, 0.0f, 1.0f};
@@ -1678,6 +1677,8 @@ class HelloTriangleApplication {
                 vkCmdBeginRenderPass(dynamicCommandBuffer, &info, VK_SUBPASS_CONTENTS_INLINE);
 
                 ImGui::Text("HELLO");
+                ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+
                 ImGui_ImplGlfwVulkan_Render(dynamicCommandBuffer);
 
                 
